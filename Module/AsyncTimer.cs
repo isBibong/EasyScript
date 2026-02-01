@@ -38,5 +38,7 @@ public class AsyncTimer
     public void Stop()
     {
         _cts?.Cancel();
+        _cts?.Dispose();
+        _cts = null;
     }
 }

@@ -1,8 +1,9 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Runtime.InteropServices;
 using System.Threading;
-using System.Threading.Tasks;
 using System.Windows.Forms;
+using static System.Windows.Forms.LinkLabel;
 
 namespace TestProject
 {
@@ -10,8 +11,7 @@ namespace TestProject
     {
         private bool loop = false;
         private bool _isRunning = false;
-        private ManualResetEventSlim _pauseEvent = new ManualResetEventSlim(true);
-        private ExecuteCommand _executeCommand;
+        private readonly ManualResetEventSlim _pauseEvent = new ManualResetEventSlim(true);
 
         private AsyncTimer _scriptTimer;
 
@@ -34,11 +34,11 @@ namespace TestProject
 
         private void MainForm_Load(object sender, EventArgs e)
         {
-            if (Properties.Settings.Default.IsFirstRun)
+            if (EasyScript.Properties.Settings.Default.IsFirstRun)
             {
                 UserGuideMenuItem_Click(null, EventArgs.Empty);
-                Properties.Settings.Default.IsFirstRun = false;
-                Properties.Settings.Default.Save();
+                EasyScript.Properties.Settings.Default.IsFirstRun = false;
+                EasyScript.Properties.Settings.Default.Save();
             }
 
             richTextBox1.LanguageOption = RichTextBoxLanguageOptions.UIFonts;
@@ -218,6 +218,7 @@ Keyboard,Paste - 組合鍵: Ctrl+V
 
 其他類 --------------
 Other,Wait,<msTime> - 以毫秒為單位的間隔時間
+Other,Fpt,<path>,<findTime> - 找尋類似畫面，持續N秒
 # - 註解
 
 小提醒 --------------
@@ -258,106 +259,34 @@ Other,Wait,<msTime> - 以毫秒為單位的間隔時間
             base.WndProc(ref m);
         }
 
-        /* "Old ExecuteCommand Function"
-        public async Task ExecuteCommand(string input, CancellationToken token)
-        {
-            string[] parts = input.Split(',');
-            if (parts.Length < 3)
-            {
-                MessageBox.Show("腳本指令長度錯誤，請檢查!");
-                return;
-            }
-
-            string command = parts[0].ToLower();
-            string action = parts[1].ToLower();
-
-            if (command.Equals("mouse"))
-            {
-                string side = parts.Length == 2 ? parts[2] : "Left";
-                switch (action)
-                {
-                    case "down": MouseController.Down(side); break;
-                    case "up": MouseController.Up(side); break;
-                    case "press": MouseController.Press(side); break;
-                    case "move":
-                        if (parts.Length >= 4 && int.TryParse(parts[2], out int x) && int.TryParse(parts[3], out int y))
-                        {
-                            MouseController.Move(x, y);
-                        }
-                        break;
-                    default: MessageBox.Show("未知動作: " + action); break;
-                }
-
-            }
-            else if (command.Equals("keyboard"))
-            {
-                if (action.Equals("copy")) { KeyboardController.Copy(); return; }
-                if (action.Equals("cut")) { KeyboardController.Cut(); return; }
-                if (action.Equals("paste")) { KeyboardController.Paste(); return; }
-
-                string key = parts[2].ToLower();
-
-                switch (action)
-                {
-                    case "down": KeyboardController.Down(key); break;
-                    case "up": KeyboardController.Up(key); break;
-                    case "press": KeyboardController.Press(key); break;
-                    case "msg": KeyboardController.TypeText(key); break;
-                }
-            }
-            else if (command.Equals("other"))
-            {
-                switch (action)
-                {
-                    case "wait":
-                        if (int.TryParse(parts[2], out int ms))
-                        {
-                            await Task.Delay(ms, token);
-                        }
-                        break;
-
-                    default:
-                        break;
-                }
-            }
-            else
-            {
-                MessageBox.Show("未知指令: " + command);
-                Shutdown();
-            }
-        }
-        */
         private void InitScriptTimer()
         {
             string[] lines = richTextBox1.Lines;
+            List<IScriptCommand> commands = new List<IScriptCommand>();
+            foreach (var line in lines)
+            {
+                var cmd = CommandFactory.Parse(line);
+                if (cmd != null && line[0] != '#') commands.Add(cmd);
+            }
+
             _scriptTimer = new AsyncTimer(async () =>
             {
-                foreach (string line in lines)
+                foreach (var cmd in commands)
                 {
-                    try
-                    {
-                        if (!_scriptTimer.IsRunning) break;
-                        _pauseEvent.Wait(_scriptTimer.Token);
+                    if (!_scriptTimer.IsRunning) break;
 
-                        string cmd = line.Trim();
-                        if (string.IsNullOrWhiteSpace(cmd) || cmd[0] == '#') continue;
+                    if (_scriptTimer.Token.IsCancellationRequested) break;
 
-                        _executeCommand = new ExecuteCommand(cmd, _scriptTimer.Token);
-                        await _executeCommand.Execute();
-                    }
-                    catch (OperationCanceledException) { Shutdown(); }
-                    finally
-                    {
-                        
-                    }
-                }
-
-                if (!loop)
-                {
-                    Invoke(new Action(() => Shutdown()));
+                    await cmd.ExecuteAsync(_scriptTimer.Token);
                 }
             }, 1);
+
+            if (!loop)
+            {
+                Invoke(new Action(() => Shutdown()));
+            }
         }
+
         public void Shutdown()
         {
             _scriptTimer?.Stop();

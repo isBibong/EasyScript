@@ -1,7 +1,9 @@
-﻿using System.Threading;
+﻿using System;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 
+[Obsolete("請改用 IScriptCommand 體系下的各別指令類別。")]
 public class ExecuteCommand
 {
     private readonly string[] _parts;
@@ -36,59 +38,66 @@ public class ExecuteCommand
 
     public async Task MouseCommand()
     {
+        if (Utils.IsMissingArguments(_parts, 3)) return;
+
         string side = _parts.Length == 2 ? _parts[2] : "Left";
         switch (_action)
         {
-            case "down": MouseController.Down(side); break;
-            case "up": MouseController.Up(side); break;
-            case "press": MouseController.Press(side); break;
+            case "down": MouseController.Down(side); return;
+            case "up": MouseController.Up(side); return;
+            case "press": MouseController.Press(side); return;
+            
             case "move":
-                if (_parts.Length >= 4 && int.TryParse(_parts[2], out int x) && int.TryParse(_parts[3], out int y))
+                if (Utils.IsMissingArguments(_parts, 4)) return;
+                if (int.TryParse(_parts[2], out int x) && int.TryParse(_parts[3], out int y))
                 {
                     MouseController.Move(x, y);
                 }
-                break;
-            default: MessageBox.Show("未知動作: " + _action); break;
+                return;
+            
+            default: MessageBox.Show("未知動作: " + _action); return;
         }
     }
 
     public async Task KeyboardCommand()
     {
-        if (_action.Equals("copy")) { KeyboardController.Copy(); return; }
-        if (_action.Equals("cut")) { KeyboardController.Cut(); return; }
-        if (_action.Equals("paste")) { KeyboardController.Paste(); return; }
+        switch (_action.ToLower())
+        {
+            case "copy": KeyboardController.Copy(); return;
+            case "cut": KeyboardController.Cut(); return;
+            case "paste": KeyboardController.Paste(); return;
+        }
+
+        if (Utils.IsMissingArguments(_parts, 3)) return;
 
         string key = _parts[2].ToLower();
-
         switch (_action)
         {
-            case "down": KeyboardController.Down(key); break;
-            case "up": KeyboardController.Up(key); break;
-            case "press": KeyboardController.Press(key); break;
-            case "msg": KeyboardController.TypeText(key); break;
+            case "down": KeyboardController.Down(key); return;
+            case "up": KeyboardController.Up(key); return;
+            case "press": KeyboardController.Press(key); return;
+            case "msg": KeyboardController.TypeText(key); return;
         }
     }
 
     public async Task OtherCommandAsync(string arg1)
     {
+        if (Utils.IsMissingArguments(_parts, 3)) return;
+
         switch (_action)
         {
             case "wait":
                 if (int.TryParse(arg1, out int ms)) { await Task.Delay(ms, _cancellationToken); }
-                break;
+                return;
 
             default:
-                break;
+                return;
         }
     }
 
     public bool GetCommandAndAction()
     {
-        if (_parts.Length < 3)
-        {
-            MessageBox.Show("腳本指令長度錯誤，請檢查!");
-            return false;
-        }
+        if (Utils.IsMissingArguments(_parts, 2)) return false;
 
         _command = _parts[0].ToLower();
         _action = _parts[1].ToLower();
