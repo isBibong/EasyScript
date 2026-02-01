@@ -11,21 +11,22 @@ namespace TestProject
         private bool loop = false;
         private bool _isRunning = false;
         private ManualResetEventSlim _pauseEvent = new ManualResetEventSlim(true);
+        private ExecuteCommand _executeCommand;
 
         private AsyncTimer _scriptTimer;
 
-        //
-        //
-        //
+        /*
+         * 
+        */
         [DllImport("user32.dll", SetLastError = true)]
         private static extern bool RegisterHotKey(IntPtr hWnd, int id, uint fsModifiers, uint vk);
 
         [DllImport("user32.dll")]
         private static extern bool UnregisterHotKey(IntPtr hWnd, int id);
 
-        //
-        //
-        //
+        /*
+         * 
+        */
         public MainForm()
         {
             InitializeComponent();
@@ -166,19 +167,35 @@ namespace TestProject
 
         private void TemplateMenuItem_Click(object sender, EventArgs e)
         {
-            string script =
-        "Other,Wait,5000\n" +
-        "Mouse,Move,500,500\n" +
-        "Keyboard,Press,H\n" +
-        "Keyboard,Msg,Hello World\n" +
-        "Mouse,Press,Left\n";
+            string templateScript = @"#棕2活動自動下一場
+#--------------
+#右下角
+#--------------
+mouse,move,1700,1010
+other,wait,100
+mouse,press,left
+#--------------
+#間隔
+#--------------
+other,wait,1000
+#--------------
+#確認
+#--------------
+mouse,move,1035,600
+other,wait,100
+mouse,press,left
+#--------------
+#等待完場
+#--------------
+other,wait,30000
+";
 
-            richTextBox1.Text = script; // 這次用覆蓋的方式
+            richTextBox1.Text = templateScript; // 這次用覆蓋的方式
         }
         private void GetPositionMenuItem_Click(object sender, EventArgs e)
         {
-            GetPositionForm form = new GetPositionForm();
-            form.Show();
+            GetPositionForm getPositionForm = new GetPositionForm();
+            getPositionForm.Show();
         }
 
         private void UserGuideMenuItem_Click(object sender, EventArgs e)
@@ -209,12 +226,12 @@ Other,Wait,<msTime> - 以毫秒為單位的間隔時間
         }
         private void AboutMenuItem_Click(object sender, EventArgs e)
         {
-            MessageBox.Show("EasyScript b1.2 簡易腳本工具\n作者: Bibong", "關於");
+            MessageBox.Show("EasyScript b1.3 簡易腳本工具\n作者: Bibong", "關於");
         }
 
-        //
-        //
-        //
+        /*
+         * Check Hotkey
+        */
         protected override void WndProc(ref Message m)
         {
             const int WM_HOTKEY = 0x0312;
@@ -241,6 +258,7 @@ Other,Wait,<msTime> - 以毫秒為單位的間隔時間
             base.WndProc(ref m);
         }
 
+        /* "Old ExecuteCommand Function"
         public async Task ExecuteCommand(string input, CancellationToken token)
         {
             string[] parts = input.Split(',');
@@ -308,12 +326,12 @@ Other,Wait,<msTime> - 以毫秒為單位的間隔時間
                 Shutdown();
             }
         }
+        */
         private void InitScriptTimer()
         {
+            string[] lines = richTextBox1.Lines;
             _scriptTimer = new AsyncTimer(async () =>
             {
-                string[] lines = richTextBox1.Lines;
-
                 foreach (string line in lines)
                 {
                     try
@@ -324,12 +342,13 @@ Other,Wait,<msTime> - 以毫秒為單位的間隔時間
                         string cmd = line.Trim();
                         if (string.IsNullOrWhiteSpace(cmd) || cmd[0] == '#') continue;
 
-                        await ExecuteCommand(cmd, _scriptTimer.Token);
+                        _executeCommand = new ExecuteCommand(cmd, _scriptTimer.Token);
+                        await _executeCommand.Execute();
                     }
-                    catch (OperationCanceledException) { /* 當按下停止時，會從這裡跳出循環，完美結束*/ }
-                    finally 
+                    catch (OperationCanceledException) { Shutdown(); }
+                    finally
                     {
-                        Shutdown();
+                        
                     }
                 }
 
